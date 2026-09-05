@@ -66,7 +66,13 @@ input::placeholder { color: #5f5f6b; }
 .progress span { width: 7px; height: 7px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 14px #a78bfa; animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
 
-.error { margin-top: 14px; padding: 12px 14px; border-radius: 12px; color: #ffb6c9; background: rgba(255, 78, 132, .09); border: 1px solid rgba(255, 78, 132, .18); font-size: 13px; line-height: 1.5; }
+.error {
+  display: grid; gap: 5px; margin-top: 14px; padding: 14px 15px;
+  border-radius: 14px; color: #ffb6c9; background: rgba(255, 78, 132, .09);
+  border: 1px solid rgba(255, 78, 132, .18); font-size: 13px; line-height: 1.5;
+}
+.error strong { color: #ffd4df; font-size: 13px; }
+.error span { color: #9e7f89; font-size: 11px; }
 .result { position: relative; margin-top: 24px; overflow: hidden; border: 1px solid #2a2a33; border-radius: 22px; background: #0d0d12; }
 .result-badge { position: absolute; z-index: 2; top: 12px; left: 12px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; color: #eeeef3; background: rgba(8,8,11,.72); backdrop-filter: blur(10px); font-size: 10px; font-weight: 700; }
 .preview-wrap { position: relative; display: grid; place-items: center; min-height: 180px; max-height: 66svh; background: #07070a; }
