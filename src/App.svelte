@@ -32,6 +32,32 @@
     return candidates.sort((a, b) => b.width - a.width)[0]?.url || '';
   };
 
+  const pickBestImage = (images) => {
+    if (!Array.isArray(images)) return '';
+
+    const candidates = images.flatMap((image) => {
+      if (!image || typeof image !== 'object') return [];
+
+      const srcset = typeof image.srcset === 'string' ? image.srcset : '';
+      const srcsetCandidates = srcset.split(',').flatMap((entry) => {
+        const parts = entry.trim().split(/\s+/);
+        if (!parts[0]) return [];
+        return [{ url: parts[0], width: Number.parseInt(parts[1]?.replace('w', ''), 10) || 0 }];
+      });
+
+      if (image.src) {
+        srcsetCandidates.push({
+          url: image.src,
+          width: Number(image.naturalWidth) || 0
+        });
+      }
+
+      return srcsetCandidates;
+    });
+
+    return candidates.sort((a, b) => b.width - a.width)[0]?.url || '';
+  };
+
   async function extract() {
     error = '';
     imageUrl = '';
@@ -46,11 +72,36 @@
 
     loading = true;
     try {
+      const browserFunction = `async ({ page }) => {
+        await page.waitForTimeout(1200);
+
+        return await page.evaluate(() => {
+          const images = Array.from(document.images).map((image) => ({
+            src: image.currentSrc || image.src || '',
+            srcset: image.srcset || '',
+            naturalWidth: image.naturalWidth || 0,
+            naturalHeight: image.naturalHeight || 0
+          }));
+
+          const scriptText = Array.from(document.scripts)
+            .map((script) => script.textContent || '')
+            .join('\\n');
+
+          const displayUrls = [];
+          const regex = /(?:\\\\?\"display_url\\\\?\"|\\\\?\"thumbnail_src\\\\?")\\s*:\\s*\\\\?\"([^\\\"]+)/g;
+          let match;
+          while ((match = regex.exec(scriptText)) && displayUrls.length < 20) {
+            displayUrls.push(match[1].replace(/\\\\\\\"/g, '\"'));
+          }
+
+          return { images, displayUrls };
+        });
+      }`;
+
       const params = new URLSearchParams({
         url: value,
         meta: 'true',
-        'data.images.selector': 'img',
-        'data.images.attribute': 'srcset'
+        function: browserFunction
       });
 
       const response = await fetch(`https://api.microlink.io/?${params}`);
@@ -58,7 +109,13 @@
 
       const payload = await response.json();
       const data = payload?.data ?? {};
-      const image = pickLargestImage(data.images) || data.image?.url || data.image;
+      const functionValue = data.value ?? {};
+      const image =
+        pickBestImage(functionValue.images) ||
+        functionValue.displayUrls?.[0] ||
+        pickLargestImage(data.images) ||
+        data.image?.url ||
+        data.image;
 
       if (!image) {
         throw new Error('image not found');
