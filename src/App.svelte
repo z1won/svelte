@@ -15,46 +15,20 @@
     }
   };
 
-  const pickLargestImage = (images) => {
-    if (!Array.isArray(images)) return '';
-
-    const candidates = images.flatMap((value) => {
-      if (typeof value !== 'string') return [];
-
-      return value.split(',').map((entry) => {
-        const parts = entry.trim().split(/\s+/);
-        const url = parts[0];
-        const width = Number.parseInt(parts[1]?.replace('w', ''), 10) || 0;
-        return { url, width };
-      });
-    });
-
-    return candidates.sort((a, b) => b.width - a.width)[0]?.url || '';
-  };
-
   const pickBestImage = (images) => {
     if (!Array.isArray(images)) return '';
-
     const candidates = images.flatMap((image) => {
       if (!image || typeof image !== 'object') return [];
-
-      const srcset = typeof image.srcset === 'string' ? image.srcset : '';
-      const srcsetCandidates = srcset.split(',').flatMap((entry) => {
-        const parts = entry.trim().split(/\s+/);
-        if (!parts[0]) return [];
-        return [{ url: parts[0], width: Number.parseInt(parts[1]?.replace('w', ''), 10) || 0 }];
-      });
-
-      if (image.src) {
-        srcsetCandidates.push({
-          url: image.src,
-          width: Number(image.naturalWidth) || 0
-        });
+      const result = [];
+      if (typeof image.srcset === 'string') {
+        for (const entry of image.srcset.split(',')) {
+          const parts = entry.trim().split(/\s+/);
+          if (parts[0]) result.push({ url: parts[0], width: Number.parseInt(parts[1]?.replace('w', ''), 10) || 0 });
+        }
       }
-
-      return srcsetCandidates;
+      if (image.src) result.push({ url: image.src, width: Number(image.naturalWidth) || 0 });
+      return result;
     });
-
     return candidates.sort((a, b) => b.width - a.width)[0]?.url || '';
   };
 
@@ -63,7 +37,6 @@
     imageUrl = '';
     title = '';
     author = '';
-
     const value = input.trim();
     if (!isInstagramUrl(value)) {
       error = '공개 Instagram 게시물 링크를 입력해 주세요.';
@@ -72,58 +45,43 @@
 
     loading = true;
     try {
-      const browserFunction = `async ({ page }) => {
-        await page.waitForTimeout(1200);
-
-        return await page.evaluate(() => {
-          const images = Array.from(document.images).map((image) => ({
-            src: image.currentSrc || image.src || '',
-            srcset: image.srcset || '',
-            naturalWidth: image.naturalWidth || 0,
-            naturalHeight: image.naturalHeight || 0
-          }));
-
-          const scriptText = Array.from(document.scripts)
-            .map((script) => script.textContent || '')
-            .join('\\n');
-
-          const displayUrls = [];
-          const regex = /(?:\\\\?\"display_url\\\\?\"|\\\\?\"thumbnail_src\\\\?")\\s*:\\s*\\\\?\"([^\\\"]+)/g;
-          let match;
-          while ((match = regex.exec(scriptText)) && displayUrls.length < 20) {
-            displayUrls.push(match[1].replace(/\\\\\\\"/g, '\"'));
-          }
-
-          return { images, displayUrls };
-        });
-      }`;
-
-      const params = new URLSearchParams({
-        url: value,
-        meta: 'true',
-        function: browserFunction
-      });
-
+      const params = new URLSearchParams({ url: value, meta: 'true' });
       const response = await fetch(`https://api.microlink.io/?${params}`);
       if (!response.ok) throw new Error('metadata request failed');
-
       const payload = await response.json();
       const data = payload?.data ?? {};
-      const functionValue = data.value ?? {};
-      const image =
-        pickBestImage(functionValue.images) ||
-        functionValue.displayUrls?.[0] ||
-        pickLargestImage(data.images) ||
-        data.image?.url ||
-        data.image;
-
-      if (!image) {
-        throw new Error('image not found');
-      }
-
-      imageUrl = image;
+      const fallbackImage = data.image?.url || data.image || '';
       title = data.title || 'Instagram photo';
       author = data.author || data.siteName || 'Instagram';
+
+      let bestImage = '';
+      try {
+        const browserFunction = `async ({ page }) => {
+          await page.waitForTimeout(1500);
+          return page.evaluate(() => ({
+            images: Array.from(document.images).map((image) => ({
+              src: image.currentSrc || image.src || '',
+              srcset: image.srcset || '',
+              naturalWidth: image.naturalWidth || 0,
+              naturalHeight: image.naturalHeight || 0
+            })),
+            ogImage: document.querySelector('meta[property="og:image"]')?.content || '',
+            twitterImage: document.querySelector('meta[name="twitter:image"]')?.content || ''
+          }));
+        }`;
+        const browserParams = new URLSearchParams({ url: value, function: browserFunction });
+        const browserResponse = await fetch(`https://api.microlink.io/?${browserParams}`);
+        if (browserResponse.ok) {
+          const browserPayload = await browserResponse.json();
+          const rendered = browserPayload?.data?.value ?? {};
+          bestImage = pickBestImage(rendered.images) || rendered.ogImage || rendered.twitterImage || '';
+        }
+      } catch {
+        // Keep the known-good metadata image.
+      }
+
+      imageUrl = bestImage || fallbackImage;
+      if (!imageUrl) throw new Error('image not found');
     } catch {
       error = '이미지를 찾지 못했습니다. 공개 게시물인지 확인하거나 잠시 후 다시 시도해 주세요.';
     } finally {
@@ -133,7 +91,6 @@
 
   async function download() {
     if (!imageUrl) return;
-
     try {
       const response = await fetch(imageUrl, { mode: 'cors' });
       if (!response.ok) throw new Error('download failed');
@@ -165,38 +122,24 @@
         <h1>InstaSave</h1>
       </div>
     </div>
-
     <p class="lead">공개 Instagram 게시물의 사진을 찾아<br />미리 보고 저장하세요.</p>
-
     <form on:submit|preventDefault={extract} class="form">
       <label for="url">Instagram 링크</label>
       <div class="input-row">
         <input id="url" bind:value={input} type="url" inputmode="url" autocomplete="off" placeholder="https://www.instagram.com/p/..." />
-        <button class="primary" type="submit" disabled={loading}>
-          {loading ? '찾는 중…' : '추출'}
-        </button>
+        <button class="primary" type="submit" disabled={loading}>{loading ? '찾는 중…' : '추출'}</button>
       </div>
     </form>
-
-    {#if error}
-      <div class="error" role="alert">{error}</div>
-    {/if}
-
+    {#if error}<div class="error" role="alert">{error}</div>{/if}
     {#if imageUrl}
       <article class="result">
-        <div class="preview-wrap">
-          <img class="preview" src={imageUrl} alt={title} />
-        </div>
+        <div class="preview-wrap"><img class="preview" src={imageUrl} alt={title} /></div>
         <div class="result-info">
-          <div>
-            <p class="result-title">{title}</p>
-            <p class="result-author">{author}</p>
-          </div>
+          <div><p class="result-title">{title}</p><p class="result-author">{author}</p></div>
           <button class="download" on:click={download}>사진 저장</button>
         </div>
       </article>
     {/if}
-
     <p class="notice">공개된 콘텐츠와 다운로드 권한이 있는 콘텐츠만 이용하세요.</p>
   </section>
 </main>
