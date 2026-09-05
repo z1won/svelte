@@ -5,10 +5,12 @@
   let author = '';
   let loading = false;
   let error = '';
+  let errorDetail = '';
   let sourceLabel = '';
   let imageStatus = '';
   let imageWidth = 0;
   let imageHeight = 0;
+  let candidateCount = 0;
 
   const isInstagramUrl = (value) => {
     try {
@@ -25,12 +27,19 @@
     .replace(/\\\//g, '/')
     .replace(/&amp;/g, '&')
     .replace(/\\u003D/g, '=')
-    .replace(/\\u003F/g, '?');
+    .replace(/\\u003F/g, '?')
+    .replace(/\\u0025/gi, '%');
 
-  const isImageUrl = (url) => {
+  const isImageUrl = (value) => {
     try {
-      const parsed = new URL(url);
-      return /(^|\.)fbcdn\.net$|(^|\.)cdninstagram\.com$/i.test(parsed.hostname);
+      const parsed = new URL(normalizeUrl(value));
+      const host = parsed.hostname.toLowerCase();
+      const path = parsed.pathname.toLowerCase();
+      const query = parsed.search.toLowerCase();
+      return /(^|\.)fbcdn\.net$|(^|\.)cdninstagram\.com$|(^|\.)instagram\.com$/i.test(host)
+        || /\.(jpe?g|png|webp|avif)(?:$|\?)/i.test(path)
+        || query.includes('stp=dst-jpg')
+        || query.includes('stp=dst-webp');
     } catch {
       return false;
     }
@@ -38,7 +47,7 @@
 
   const addUrl = (set, value) => {
     const url = normalizeUrl(value).trim();
-    if (isImageUrl(url)) set.add(url);
+    if (/^https?:\/\//i.test(url) && isImageUrl(url)) set.add(url);
   };
 
   const addSrcset = (set, value) => {
@@ -53,24 +62,30 @@
     const urls = new Set();
     if (typeof html !== 'string' || !html) return urls;
 
+    const decoded = html
+      .replace(/\\u0026/g, '&')
+      .replace(/\\u002F/gi, '/')
+      .replace(/\\\//g, '/')
+      .replace(/&amp;/g, '&')
+      .replace(/\\u003D/g, '=')
+      .replace(/\\u003F/g, '?')
+      .replace(/\\u0025/gi, '%');
+
     try {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const doc = new DOMParser().parseFromString(decoded, 'text/html');
       for (const img of doc.querySelectorAll('img')) {
         addUrl(urls, img.getAttribute('src'));
         addSrcset(urls, img.getAttribute('srcset'));
+        addUrl(urls, img.getAttribute('data-src'));
+        addSrcset(urls, img.getAttribute('data-srcset'));
       }
       for (const meta of doc.querySelectorAll('meta[property="og:image"], meta[name="twitter:image"]')) {
         addUrl(urls, meta.getAttribute('content'));
       }
     } catch {
-      // Fall back to escaped URL scanning below.
+      // URL scanning below is the fallback.
     }
 
-    const decoded = html
-      .replace(/\\u0026/g, '&')
-      .replace(/\\u002F/gi, '/')
-      .replace(/\\\//g, '/')
-      .replace(/&amp;/g, '&');
     const matches = decoded.match(/https?:\/\/[^\"'<>\s\\]+/gi) || [];
     for (const match of matches) addUrl(urls, match);
 
@@ -80,7 +95,7 @@
   const collectFromValue = (value, urls) => {
     if (!value) return;
     if (typeof value === 'string') {
-      if (isImageUrl(normalizeUrl(value))) addUrl(urls, value);
+      addUrl(urls, value);
       addSrcset(urls, value);
       return;
     }
@@ -97,7 +112,8 @@
     const urls = collectFromHtml(data?.html);
     collectFromValue(data?.images, urls);
     collectFromValue(data?.image, urls);
-    return [...urls].slice(0, 30);
+    collectFromValue(data?.media, urls);
+    return [...urls];
   };
 
   const probeImage = (url) => new Promise((resolve) => {
@@ -116,6 +132,7 @@
 
   async function extract() {
     error = '';
+    errorDetail = '';
     imageUrl = '';
     title = '';
     author = '';
@@ -123,6 +140,7 @@
     imageStatus = '';
     imageWidth = 0;
     imageHeight = 0;
+    candidateCount = 0;
     const value = input.trim();
 
     if (!isInstagramUrl(value)) {
@@ -131,7 +149,7 @@
     }
 
     loading = true;
-    imageStatus = 'Instagram 이미지 후보를 수집하고 실제 해상도를 확인하고 있어요';
+    imageStatus = 'Instagram 페이지를 분석하고 이미지 후보를 확인하고 있어요';
 
     try {
       const params = new URLSearchParams({
@@ -142,32 +160,41 @@
         'images.attribute': 'srcset'
       });
       const response = await fetch(`https://api.microlink.io/?${params}`);
-      if (!response.ok) throw new Error('metadata request failed');
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const apiMessage = payload?.message || payload?.data?.message || `HTTP ${response.status}`;
+        throw new Error(`Microlink ${apiMessage}`);
+      }
 
-      const payload = await response.json();
       const data = payload?.data ?? {};
       title = data.title || 'Instagram photo';
       author = data.author || data.siteName || 'Instagram';
 
       const candidates = getCandidateUrls(data);
-      const fallbackImage = normalizeUrl(data.image?.url || data.image || '');
-      if (isImageUrl(fallbackImage)) candidates.push(fallbackImage);
+      candidateCount = candidates.length;
 
-      const uniqueCandidates = [...new Set(candidates)].slice(0, 20);
+      const uniqueCandidates = [...new Set(candidates)].slice(0, 80);
+      imageStatus = uniqueCandidates.length
+        ? `${uniqueCandidates.length}개 후보의 실제 해상도를 확인하고 있어요`
+        : '이미지 후보를 찾지 못해 페이지 데이터를 다시 확인하고 있어요';
+
       const probed = (await Promise.all(uniqueCandidates.map(probeImage))).filter(Boolean);
       probed.sort((a, b) => (b.width * b.height) - (a.width * a.height));
 
       const best = probed[0];
-      if (!best) throw new Error('image not found');
+      if (!best) throw new Error(`image candidate unavailable (${candidateCount} candidates)`);
 
       imageUrl = best.url;
       imageWidth = best.width;
       imageHeight = best.height;
-      sourceLabel = best.width >= 1080 || best.height >= 1080 ? '고해상도 원본 후보' : '확인된 이미지';
+      sourceLabel = best.width >= 1080 || best.height >= 1080 ? '고해상도 이미지' : '확인된 이미지';
       imageStatus = formatResolution(best.width, best.height);
-    } catch {
+    } catch (caught) {
       imageStatus = '';
-      error = '이미지를 찾지 못했습니다. 공개 게시물인지 확인하거나 잠시 후 다시 시도해 주세요.';
+      errorDetail = caught?.message || 'unknown error';
+      error = errorDetail.startsWith('Microlink')
+        ? '이미지 분석 서비스에서 응답하지 않았습니다. 잠시 후 다시 시도해 주세요.'
+        : 'Instagram에서 이미지 후보를 가져오지 못했습니다. 공개 게시물인지 확인해 주세요.';
     } finally {
       loading = false;
     }
@@ -212,7 +239,7 @@
 
     <div class="hero-copy">
       <h2>사진을 붙여 넣고,<br /><span>실제 해상도를 확인하세요.</span></h2>
-      <p>후보 이미지를 실제로 로드해 가장 큰 해상도를 선택합니다. 결과 카드에서 저장되는 이미지의 픽셀 크기도 바로 확인할 수 있어요.</p>
+      <p>페이지에서 확인되는 이미지 후보를 실제로 로드해 가장 큰 해상도를 선택합니다. 결과 카드에서 저장 대상의 픽셀 크기도 확인할 수 있어요.</p>
     </div>
 
     <form on:submit|preventDefault={extract} class="form">
@@ -230,7 +257,12 @@
       <div class="progress" aria-live="polite"><span></span>{imageStatus}</div>
     {/if}
 
-    {#if error}<div class="error" role="alert">{error}</div>{/if}
+    {#if error}
+      <div class="error" role="alert">
+        <strong>{error}</strong>
+        <span>{candidateCount ? `확인된 후보 ${candidateCount}개` : '이미지 후보 0개'}</span>
+      </div>
+    {/if}
 
     {#if imageUrl}
       <article class="result">
