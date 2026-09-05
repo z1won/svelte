@@ -15,21 +15,18 @@
     }
   };
 
-  const pickBestImage = (images) => {
-    if (!Array.isArray(images)) return '';
-    const candidates = images.flatMap((image) => {
-      if (!image || typeof image !== 'object') return [];
-      const result = [];
-      if (typeof image.srcset === 'string') {
-        for (const entry of image.srcset.split(',')) {
-          const parts = entry.trim().split(/\s+/);
-          if (parts[0]) result.push({ url: parts[0], width: Number.parseInt(parts[1]?.replace('w', ''), 10) || 0 });
-        }
-      }
-      if (image.src) result.push({ url: image.src, width: Number(image.naturalWidth) || 0 });
-      return result;
-    });
-    return candidates.sort((a, b) => b.width - a.width)[0]?.url || '';
+  const normalizeUrl = (value) => value
+    .replace(/\\u0026/g, '&')
+    .replace(/\\u002F/gi, '/')
+    .replace(/\\\//g, '/')
+    .replace(/&amp;/g, '&');
+
+  const pickLargest = (urls) => {
+    if (!Array.isArray(urls)) return '';
+    const candidates = urls
+      .map((url) => normalizeUrl(url))
+      .filter((url) => /^https?:\/\//i.test(url));
+    return candidates.find((url) => !/s(?:150x150|320x320|480x480|640x640|750x750|1080x1080)/i.test(url)) || candidates[0] || '';
   };
 
   async function extract() {
@@ -54,33 +51,26 @@
       title = data.title || 'Instagram photo';
       author = data.author || data.siteName || 'Instagram';
 
-      let bestImage = '';
+      let highResImage = '';
       try {
-        const browserFunction = `async ({ page }) => {
-          await page.waitForTimeout(1500);
-          return page.evaluate(() => ({
-            images: Array.from(document.images).map((image) => ({
-              src: image.currentSrc || image.src || '',
-              srcset: image.srcset || '',
-              naturalWidth: image.naturalWidth || 0,
-              naturalHeight: image.naturalHeight || 0
-            })),
-            ogImage: document.querySelector('meta[property="og:image"]')?.content || '',
-            twitterImage: document.querySelector('meta[name="twitter:image"]')?.content || ''
-          }));
+        const browserFunction = `({ html }) => {
+          const display = [...html.matchAll(/\\"display_url\\":\\"(https:[^\\"]+)\\"/g)].map((m) => m[1]);
+          const candidates = [...html.matchAll(/\\"url\\":\\"(https:[^\\"]+)\\"[^}]{0,220}?\\"width\\":(\\d+),\\"height\\":(\\d+)/g)]
+            .sort((a, b) => Number(b[2]) * Number(b[3]) - Number(a[2]) * Number(a[3]))
+            .map((m) => m[1]);
+          return [...display, ...candidates].slice(0, 30);
         }`;
-        const browserParams = new URLSearchParams({ url: value, function: browserFunction });
+        const browserParams = new URLSearchParams({ url: value, function: browserFunction, meta: 'false' });
         const browserResponse = await fetch(`https://api.microlink.io/?${browserParams}`);
         if (browserResponse.ok) {
           const browserPayload = await browserResponse.json();
-          const rendered = browserPayload?.data?.value ?? {};
-          bestImage = pickBestImage(rendered.images) || rendered.ogImage || rendered.twitterImage || '';
+          highResImage = pickLargest(browserPayload?.data?.value);
         }
       } catch {
         // Keep the known-good metadata image.
       }
 
-      imageUrl = bestImage || fallbackImage;
+      imageUrl = highResImage || fallbackImage;
       if (!imageUrl) throw new Error('image not found');
     } catch {
       error = '이미지를 찾지 못했습니다. 공개 게시물인지 확인하거나 잠시 후 다시 시도해 주세요.';
