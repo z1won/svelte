@@ -34,12 +34,7 @@ button:disabled { cursor: wait; opacity: .68; }
 }
 
 .brand { display: flex; align-items: center; gap: 14px; }
-.brand-mark {
-  width: 48px; height: 48px; display: grid; place-items: center;
-  border-radius: 15px; background: linear-gradient(135deg, #ffcf4a, #ff4f8b 48%, #8a5cff);
-  color: white; font-size: 14px; font-weight: 800;
-  box-shadow: 0 8px 24px rgba(255, 79, 139, .18);
-}
+.brand-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #ffcf4a, #ff4f8b 48%, #8a5cff); color: white; font-size: 14px; font-weight: 800; box-shadow: 0 8px 24px rgba(255, 79, 139, .18); }
 .eyebrow { margin: 0 0 3px; color: #8f8f9b; font-size: 10px; letter-spacing: .16em; font-weight: 700; }
 h1 { margin: 0; font-size: 22px; letter-spacing: -.04em; }
 
@@ -50,11 +45,7 @@ h1 { margin: 0; font-size: 22px; letter-spacing: -.04em; }
 
 .form label { display: block; margin-bottom: 9px; color: #dddde4; font-size: 13px; font-weight: 600; }
 .input-row { display: flex; gap: 8px; }
-input {
-  min-width: 0; flex: 1; height: 54px; padding: 0 16px;
-  border: 1px solid #30303a; border-radius: 15px; outline: none;
-  color: #fff; background: #0d0d12; transition: border-color .2s, box-shadow .2s;
-}
+input { min-width: 0; flex: 1; height: 54px; padding: 0 16px; border: 1px solid #30303a; border-radius: 15px; outline: none; color: #fff; background: #0d0d12; transition: border-color .2s, box-shadow .2s; }
 input:focus { border-color: #8a5cff; box-shadow: 0 0 0 3px rgba(138, 92, 255, .14); }
 input::placeholder { color: #5f5f6b; }
 
@@ -66,23 +57,17 @@ input::placeholder { color: #5f5f6b; }
 .progress span { width: 7px; height: 7px; border-radius: 50%; background: #a78bfa; box-shadow: 0 0 14px #a78bfa; animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; transform: scale(.7); } }
 
-.error {
-  display: grid; gap: 5px; margin-top: 14px; padding: 14px 15px;
-  border-radius: 14px; color: #ffb6c9; background: rgba(255, 78, 132, .09);
-  border: 1px solid rgba(255, 78, 132, .18); font-size: 13px; line-height: 1.5;
-}
-.error strong { color: #ffd4df; font-size: 13px; }
-.error span { color: #9e7f89; font-size: 11px; }
+.error { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; margin-top: 14px; padding: 14px; border-radius: 14px; color: #ffb6c9; background: rgba(255, 78, 132, .09); border: 1px solid rgba(255, 78, 132, .18); font-size: 13px; line-height: 1.5; }
+.error strong { grid-column: 1 / -1; }
+.error span { color: #b98598; font-size: 11px; }
+.error button { justify-self: end; padding: 8px 11px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; color: #fff; background: rgba(255,255,255,.08); font-size: 11px; font-weight: 700; }
+.error button:hover { background: rgba(255,255,255,.14); }
+
 .result { position: relative; margin-top: 24px; overflow: hidden; border: 1px solid #2a2a33; border-radius: 22px; background: #0d0d12; }
 .result-badge { position: absolute; z-index: 2; top: 12px; left: 12px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; color: #eeeef3; background: rgba(8,8,11,.72); backdrop-filter: blur(10px); font-size: 10px; font-weight: 700; }
 .preview-wrap { position: relative; display: grid; place-items: center; min-height: 180px; max-height: 66svh; background: #07070a; }
 .preview { display: block; width: 100%; max-height: 66svh; object-fit: contain; }
-.resolution-pill {
-  position: absolute; right: 12px; bottom: 12px; padding: 8px 10px;
-  border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
-  color: #fff; background: rgba(8,8,11,.76); backdrop-filter: blur(10px);
-  font-size: 11px; font-weight: 800; letter-spacing: .01em;
-}
+.resolution-pill { position: absolute; right: 12px; bottom: 12px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; color: #fff; background: rgba(8,8,11,.76); backdrop-filter: blur(10px); font-size: 11px; font-weight: 800; letter-spacing: .01em; }
 .result-info { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; }
 .result-title { margin: 0; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
 .result-author { margin: 5px 0 0; color: #858590; font-size: 12px; }
