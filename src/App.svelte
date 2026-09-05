@@ -28,9 +28,9 @@
   const resolution = (w, h) => w && h ? `${w.toLocaleString()} × ${h.toLocaleString()} px` : '해상도 확인 중';
   const ext = (url, kind) => kind === 'video' ? 'mp4' : (/\.(png|webp|avif)(?:[?#]|$)/i.test(url) ? url.match(/\.(png|webp|avif)/i)[1] : 'jpg');
 
-  const collectMedia = `async({page})=>page.evaluate(()=>{const a=[],add=(u,k='image',w=0,h=0)=>{u=String(u||'').replace(/\\u0026/g,'&').replace(/\\u002F/gi,'/').replace(/\\\//g,'/');try{if(/^https?:\/\/(?:[^/]+\.)?(?:cdninstagram|fbcdn|fbsbx)\./i.test(u))a.push({url:u,kind:k,width:+w||0,height:+h||0})}catch{}};const scan=t=>{for(const m of t.matchAll(/"video_url":"([^"]+)"/g))add(m[1],'video');for(const m of t.matchAll(/"video_versions"\s*:\s*\[([\s\S]*?)\]/g))for(const v of m[1].matchAll(/"url"\s*:\s*"([^"]+)"/g))add(v[1],'video');for(const m of t.matchAll(/"display_url":"([^"]+)"/g))add(m[1],'image')};document.querySelectorAll('script').forEach(s=>scan(s.textContent||''));document.querySelectorAll('video').forEach(v=>add(v.currentSrc||v.src,'video',v.videoWidth,v.videoHeight));document.querySelectorAll('img').forEach(i=>add(i.currentSrc||i.src,'image',i.naturalWidth,i.naturalHeight));return a})`;
+  const collectMedia = `async({page})=>page.evaluate(()=>{const a=[],add=(u,k='image',w=0,h=0)=>{u=String(u||'').replace(/\\u0026/g,'&').replace(/\\u002F/gi,'/').replace(/\\\//g,'/');try{if(/^https?:\/\/(?:[^/]+\.)?(?:cdninstagram|fbcdn|fbsbx)\./i.test(u))a.push({url:u,kind:k,width:+w||0,height:+h||0})}catch{}};const scan=t=>{for(const m of t.matchAll(/\"video_url\":\"([^\"]+)\"/g))add(m[1],'video');for(const m of t.matchAll(/\"video_versions\"\s*:\s*\[([\s\S]*?)\]/g))for(const v of m[1].matchAll(/\"url\"\s*:\s*\"([^\"]+)\"/g))add(v[1],'video');for(const m of t.matchAll(/\"display_url\":\"([^\"]+)\"/g))add(m[1],'image')};document.querySelectorAll('script').forEach(s=>scan(s.textContent||''));document.querySelectorAll('video').forEach(v=>add(v.currentSrc||v.src,'video',v.videoWidth,v.videoHeight));document.querySelectorAll('img').forEach(i=>add(i.currentSrc||i.src,'image',i.naturalWidth,i.naturalHeight));return a})`;
 
-  const collectGraphqlMedia = `async({page})=>page.evaluate(async()=>{let s=location.pathname.split('/').filter(Boolean)[1],A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',n=0;for(let c of s)n=n*64+A.indexOf(c);let i=(+new URL(location).searchParams.get('img_index')||1)-1,h=document.documentElement.innerHTML,t=(h.match(/__eqmc[^>]*>.*?"l":"([^"]+)/)||h.match(/"LSD",\[\],\{"token":"([^"]+)/)||[])[1];if(!t)return[];let r=await fetch('/api/graphql',{method:'POST',headers:{'X-FB-LSD':t},body:new URLSearchParams({lsd:t,variables:'{"media_id":"'+n+'"}',doc_id:'27130156389949648'})}),m=(await r.json())?.data?.xig_polaris_media?.if_not_gated_logged_out,c=m?.carousel_media?.[i]||m,o=[],a=c?.image_versions2?.candidates;if(a?.length){let v=a.sort((x,y)=>y.width*y.height-x.width*x.height)[0];o.push({url:v.url,kind:'image',width:v.width,height:v.height})}let v=c?.video_versions?.sort((x,y)=>y.width*y.height-x.width*x.height)[0];if(v)o.push({url:v.url,kind:'video',width:v.width,height:v.height});return o})`;
+  const collectGraphqlMedia = `async({page})=>page.evaluate(async()=>{let s=location.pathname.split('/').filter(Boolean)[1],A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',n=0;for(let c of s)n=n*64+A.indexOf(c);let i=(+new URL(location).searchParams.get('img_index')||1)-1,h=document.documentElement.innerHTML,t=(h.match(/__eqmc[\s\S]*?\"l\":\"([^\"]+)/)||h.match(/\"LSD\",\[\],\{\"token\":\"([^\"]+)/)||[])[1];if(!t)return[];let r=await fetch('/api/graphql',{method:'POST',headers:{'X-FB-LSD':t},body:new URLSearchParams({lsd:t,variables:'{\"media_id\":\"'+n+'\"}',doc_id:'27130156389949648'})}),m=(await r.json())?.data?.xig_polaris_media?.if_not_gated_logged_out,c=m?.carousel_media?.[i]||m,o=[],a=c?.image_versions2?.candidates;if(a?.length){let v=a.sort((x,y)=>y.width*y.height-x.width*x.height)[0];o.push({url:v.url,kind:'image',width:v.width,height:v.height})}let v=c?.video_versions?.sort((x,y)=>y.width*y.height-x.width*x.height)[0];if(v)o.push({url:v.url,kind:'video',width:v.width,height:v.height});return o})`;
 
   async function pasteLink() {
     try { const text = await navigator.clipboard.readText(); if (text) { input = text.trim(); copied = true; setTimeout(() => copied = false, 1400); } } catch {}
@@ -101,18 +101,29 @@
   const current = () => media[selected] || null;
   async function save(item, index = selected) {
     if (!item?.url) return;
-    status = `${item.kind === 'video' ? '동영상' : '이미지'}를 저장하고 있어요`;
+    const filename = `instagram-${String(index + 1).padStart(2, '0')}-${Date.now()}.${ext(item.url, item.kind)}`;
+    status = `${item.kind === 'video' ? '동영상' : '사진'} 저장을 준비하고 있어요`;
     try {
-      const response = await fetch(item.url, { mode: 'cors' });
+      const source = item.kind === 'image' ? `https://wsrv.nl/?url=${encodeURIComponent(item.url)}&q=100` : item.url;
+      const response = await fetch(source, { mode: 'cors' });
       if (!response.ok) throw 0;
       const blob = await response.blob();
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = href;
-      link.download = `instagram-${String(index + 1).padStart(2, '0')}-${Date.now()}.${ext(item.url, item.kind)}`;
-      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(href);
+      link.download = filename;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 1200);
       status = `${item.kind === 'video' ? '동영상' : '사진'} 저장 완료 · ${resolution(item.width, item.height)}`;
-    } catch { status = '원본 주소를 새 탭에서 열었어요'; window.open(item.url, '_blank', 'noopener,noreferrer'); }
+    } catch {
+      const link = document.createElement('a');
+      link.href = item.kind === 'image' ? `https://wsrv.nl/?url=${encodeURIComponent(item.url)}&q=100` : item.url;
+      link.download = filename;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link); link.click(); link.remove();
+      status = item.kind === 'image' ? '사진 다운로드를 새 탭에서 시작했어요' : '동영상 원본을 새 탭에서 열었어요 · 브라우저 메뉴에서 다운로드할 수 있어요';
+    }
   }
   function openOriginal() { const item = current(); if (item) window.open(item.url, '_blank', 'noopener,noreferrer'); }
 </script>
@@ -126,17 +137,17 @@
   <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
   <section class="shell">
     <header class="topbar"><div class="brand"><div class="brand-mark"><span>IS</span></div><div class="brand-name">InstaSave</div></div><div class="availability"><i></i> PUBLIC MEDIA</div></header>
-    <div class="hero"><div class="hero-kicker"><span>01</span> INSTAGRAM MEDIA EXTRACTOR</div><h1>공개 미디어를<br/><em>빠르게 저장하세요.</em></h1><p>사진, 캐러셀, 공개 릴스까지 한 링크에서 확인합니다.<br class="desktop"/> 캐러셀 링크의 <strong>img_index</strong>도 반영하고, 릴스는 실제 동영상 스트림만 성공으로 처리해요.</p></div>
+    <div class="hero"><div class="hero-kicker"><span>01</span> INSTAGRAM MEDIA EXTRACTOR</div><h1>원본 사진을<br/><em>깔끔하게 저장하세요.</em></h1><p>사진, 캐러셀, 공개 릴스까지 한 링크에서 확인합니다.<br class="desktop"/> 캐러셀 링크의 <strong>img_index</strong>도 반영하고, 릴스는 실제 동영상 스트림만 성공으로 처리해요.</p></div>
     <section class="extract-card"><div class="card-topline"><div><span class="step-dot">1</span><span>Instagram 링크</span></div><button type="button" class="paste" on:click={pasteLink}>{copied ? '붙여넣음 ✓' : '클립보드 붙여넣기'}</button></div>
       <form on:submit|preventDefault={extract}><div class="input-shell"><span class="input-icon">↗</span><input bind:value={input} type="url" inputmode="url" autocomplete="off" aria-label="Instagram 링크" placeholder="instagram.com/p/... 또는 /reel/..."/>{#if input}<button type="button" class="clear" aria-label="입력 지우기" on:click={() => input = ''}>×</button>{/if}<button class="primary" type="submit" disabled={loading}><span>{loading ? '분석 중' : '미디어 찾기'}</span><b>→</b></button></div></form>
-      <div class="helper"><span>✦</span> img_index 캐러셀 선택 · 릴스 실제 동영상 우선 · 공개 게시물 · 로그인/비공개 콘텐츠 제외</div>
+      <div class="helper"><span>✦</span> img_index 캐러셀 선택 · 원본 해상도 우선 · 사진 다운로드 지원 · 공개 게시물만</div>
     </section>
     {#if loading}<div class="progress"><div class="loader"><span></span><span></span><span></span></div><div><strong>{status}</strong><small>{stage}</small></div></div>{/if}
     {#if error}<div class="error"><div class="error-icon">!</div><div class="error-copy"><strong>{error}</strong><span>{stage}</span></div><button type="button" on:click={extract}>다시 시도 ↗</button></div>{/if}
     {#if media.length}
       {@const item = current()}
       <article class="result"><div class="result-head"><div><span class="live-dot"></span> {item.kind === 'video' ? 'VIDEO' : 'MEDIA'} {selected + 1} / {media.length}</div><span class:video-label={item.kind === 'video'}>{item.kind === 'video' ? 'ORIGINAL VIDEO' : carouselRequest ? `CAROUSEL ${requestedIndex + 1}` : 'ORIGINAL IMAGE'}</span></div>
-        <div class="preview-wrap">{#if item.kind === 'video'}<video class="preview video" src={item.url} controls playsinline preload="metadata"></video><div class="video-badge">▶ ORIGINAL STREAM</div>{:else}<img class="preview" src={item.url} alt="Instagram media"/>{/if}<div class="image-overlay"></div><div class="resolution-pill"><span>{item.kind === 'video' ? 'VIDEO' : 'RESOLUTION'}</span>{resolution(item.width, item.height)}</div></div>
+        <div class="preview-wrap">{#if item.kind === 'video'}<video class="preview video" src={item.url} controls playsinline preload="metadata"></video><div class="video-badge">▶ ORIGINAL STREAM</div>{:else}<img class="preview" src={item.url} alt="Instagram media"/>{/if}<div class="image-overlay"></div><div class="resolution-pill"><span>{item.kind === 'video' ? 'VIDEO' : 'RESOLUTION'}</span>{resolution(item.width,item.height)}</div></div>
         <div class="result-info"><div class="result-meta"><p class="result-title">Instagram 공개 미디어</p><p class="result-author">{carouselRequest ? `캐러셀 ${requestedIndex + 1}번째 이미지 · 원본` : `원본 미디어 ${selected + 1}`}</p><p class="resolution">✓ {item.kind === 'video' ? '실제 동영상 스트림' : '원본 이미지'} 확인 완료</p></div><div class="actions"><button class="secondary" on:click={openOriginal}>원본 열기</button><button class="download" on:click={() => save(item)}><span>{item.kind === 'video' ? '동영상 저장' : '사진 저장'}</span><b>↓</b></button></div></div>
         {#if media.length > 1}<div class="gallery-strip" aria-label="미디어 선택">{#each media as candidate, index}<button type="button" class:active={index === selected} class:video-thumb={candidate.kind === 'video'} class="thumb" on:click={() => selected = index} aria-label={`${index + 1}번째 ${candidate.kind === 'video' ? '동영상' : '이미지'}`}><img src={candidate.kind === 'video' ? (media.find(x => x.kind === 'image')?.url || '') : candidate.url} alt="" loading="lazy"/><span>{candidate.kind === 'video' ? '▶' : index + 1}</span></button>{/each}</div>{/if}
         {#if status}<p class="status">{status}</p>{/if}
