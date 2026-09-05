@@ -30,7 +30,7 @@
 
   const collectMedia = `async({page})=>page.evaluate(()=>{const a=[],add=(u,k='image',w=0,h=0)=>{u=String(u||'').replace(/\\u0026/g,'&').replace(/\\u002F/gi,'/').replace(/\\\//g,'/');try{if(/^https?:\/\/(?:[^/]+\.)?(?:cdninstagram|fbcdn|fbsbx)\./i.test(u))a.push({url:u,kind:k,width:+w||0,height:+h||0})}catch{}};const scan=t=>{for(const m of t.matchAll(/\"video_url\":\"([^\"]+)\"/g))add(m[1],'video');for(const m of t.matchAll(/\"video_versions\"\s*:\s*\[([\s\S]*?)\]/g))for(const v of m[1].matchAll(/\"url\"\s*:\s*\"([^\"]+)\"/g))add(v[1],'video');for(const m of t.matchAll(/\"display_url\":\"([^\"]+)\"/g))add(m[1],'image')};document.querySelectorAll('script').forEach(s=>scan(s.textContent||''));document.querySelectorAll('video').forEach(v=>add(v.currentSrc||v.src,'video',v.videoWidth,v.videoHeight));document.querySelectorAll('img').forEach(i=>add(i.currentSrc||i.src,'image',i.naturalWidth,i.naturalHeight));return a})`;
 
-  const collectGraphqlMedia = `async({page})=>page.evaluate(async()=>{let s=location.pathname.split('/').filter(Boolean)[1],A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',n=0;for(let c of s)n=n*64+A.indexOf(c);let i=(+new URL(location).searchParams.get('img_index')||1)-1,h=document.documentElement.innerHTML,t=(h.match(/__eqmc[\s\S]*?\"l\":\"([^\"]+)/)||h.match(/\"LSD\",\[\],\{\"token\":\"([^\"]+)/)||[])[1];if(!t)return[];let r=await fetch('/api/graphql',{method:'POST',headers:{'X-FB-LSD':t},body:new URLSearchParams({lsd:t,variables:'{\"media_id\":\"'+n+'\"}',doc_id:'27130156389949648'})}),m=(await r.json())?.data?.xig_polaris_media?.if_not_gated_logged_out,c=m?.carousel_media?.[i]||m,o=[],a=c?.image_versions2?.candidates;if(a?.length){let v=a.sort((x,y)=>y.width*y.height-x.width*x.height)[0];o.push({url:v.url,kind:'image',width:v.width,height:v.height})}let v=c?.video_versions?.sort((x,y)=>y.width*y.height-x.width*x.height)[0];if(v)o.push({url:v.url,kind:'video',width:v.width,height:v.height});return o})`;
+  const collectGraphqlMedia = `async({page})=>page.evaluate(async()=>{let F='PolarisLoggedOutDesktopWWWPostRootContentQuery',s=location.pathname.split('/')[2],A='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_',n=0;for(let c of s)n=n*64+A.indexOf(c);let i=(location.search.match(/img_index=(\d+)/)?.[1]||1)-1,t=JSON.parse(document.getElementById('__eqmc')?.textContent||'{}').l,c=document.cookie.match(/(?:^|; )csrftoken=([^;]+)/)?.[1];if(!t)return[];let r=await fetch('/api/graphql',{method:'POST',headers:{'X-FB-LSD':t,'X-CSRFToken':c||'','X-FB-Friendly-Name':F},body:new URLSearchParams({lsd:t,variables:'{\"media_id\":\"'+n+'\"}',doc_id:'27130156389949648'})}),m=(await r.json())?.data?.xig_polaris_media?.if_not_gated_logged_out,d=m?.carousel_media?.[i]||m,o=[],a=d?.image_versions2?.candidates;if(a?.length){let v=a.sort((x,y)=>y.width*y.height-x.width*x.height)[0];o.push({url:v.url,kind:'image'})}let v=d?.video_versions?.sort((x,y)=>y.width*y.height-x.width*x.height)[0];if(v)o.push({url:v.url,kind:'video'});return o})`;
 
   async function pasteLink() {
     try { const text = await navigator.clipboard.readText(); if (text) { input = text.trim(); copied = true; setTimeout(() => copied = false, 1400); } } catch {}
@@ -122,7 +122,7 @@
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
       document.body.appendChild(link); link.click(); link.remove();
-      status = item.kind === 'image' ? '사진 다운로드를 새 탭에서 시작했어요' : '동영상 원본을 새 탭에서 열었어요 · 브라우저 메뉴에서 다운로드할 수 있어요';
+      status = item.kind === 'image' ? '사진 원본을 새 탭에서 열었어요 · 길게 눌러 저장할 수 있어요' : '동영상 원본을 새 탭에서 열었어요 · 브라우저 메뉴에서 다운로드할 수 있어요';
     }
   }
   function openOriginal() { const item = current(); if (item) window.open(item.url, '_blank', 'noopener,noreferrer'); }
@@ -140,7 +140,7 @@
     <div class="hero"><div class="hero-kicker"><span>01</span> INSTAGRAM MEDIA EXTRACTOR</div><h1>원본 사진을<br/><em>깔끔하게 저장하세요.</em></h1><p>사진, 캐러셀, 공개 릴스까지 한 링크에서 확인합니다.<br class="desktop"/> 캐러셀 링크의 <strong>img_index</strong>도 반영하고, 릴스는 실제 동영상 스트림만 성공으로 처리해요.</p></div>
     <section class="extract-card"><div class="card-topline"><div><span class="step-dot">1</span><span>Instagram 링크</span></div><button type="button" class="paste" on:click={pasteLink}>{copied ? '붙여넣음 ✓' : '클립보드 붙여넣기'}</button></div>
       <form on:submit|preventDefault={extract}><div class="input-shell"><span class="input-icon">↗</span><input bind:value={input} type="url" inputmode="url" autocomplete="off" aria-label="Instagram 링크" placeholder="instagram.com/p/... 또는 /reel/..."/>{#if input}<button type="button" class="clear" aria-label="입력 지우기" on:click={() => input = ''}>×</button>{/if}<button class="primary" type="submit" disabled={loading}><span>{loading ? '분석 중' : '미디어 찾기'}</span><b>→</b></button></div></form>
-      <div class="helper"><span>✦</span> img_index 캐러셀 선택 · 원본 해상도 우선 · 사진 다운로드 지원 · 공개 게시물만</div>
+      <div class="helper"><span>✦</span> img_index 캐러셀 선택 · 원본 해상도 우선 · 사진 저장 강화 · 공개 게시물만</div>
     </section>
     {#if loading}<div class="progress"><div class="loader"><span></span><span></span><span></span></div><div><strong>{status}</strong><small>{stage}</small></div></div>{/if}
     {#if error}<div class="error"><div class="error-icon">!</div><div class="error-copy"><strong>{error}</strong><span>{stage}</span></div><button type="button" on:click={extract}>다시 시도 ↗</button></div>{/if}
