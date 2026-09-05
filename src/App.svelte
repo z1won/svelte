@@ -15,6 +15,23 @@
     }
   };
 
+  const pickLargestImage = (images) => {
+    if (!Array.isArray(images)) return '';
+
+    const candidates = images.flatMap((value) => {
+      if (typeof value !== 'string') return [];
+
+      return value.split(',').map((entry) => {
+        const parts = entry.trim().split(/\s+/);
+        const url = parts[0];
+        const width = Number.parseInt(parts[1]?.replace('w', ''), 10) || 0;
+        return { url, width };
+      });
+    });
+
+    return candidates.sort((a, b) => b.width - a.width)[0]?.url || '';
+  };
+
   async function extract() {
     error = '';
     imageUrl = '';
@@ -29,13 +46,19 @@
 
     loading = true;
     try {
-      const api = `https://api.microlink.io/?url=${encodeURIComponent(value)}&meta=true`;
-      const response = await fetch(api);
+      const params = new URLSearchParams({
+        url: value,
+        meta: 'true',
+        'data.images.selector': 'img',
+        'data.images.attribute': 'srcset'
+      });
+
+      const response = await fetch(`https://api.microlink.io/?${params}`);
       if (!response.ok) throw new Error('metadata request failed');
 
       const payload = await response.json();
       const data = payload?.data ?? {};
-      const image = data.image?.url || data.image;
+      const image = pickLargestImage(data.images) || data.image?.url || data.image;
 
       if (!image) {
         throw new Error('image not found');
